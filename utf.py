@@ -393,12 +393,17 @@ def execution_monitor(file_path, pragma_dictionary):
     default_restriction = 'restrictions.default'
     
     # Did the user specify a non-default restrictions file?
-    restriction = pragma_dictionary[REPY_PRAGMA]
-    if not restriction: 
-      restriction = default_restriction
+    repyArgs = pragma_dictionary[REPY_PRAGMA]
+    if not repyArgs: 
+      repyArgs = default_restriction
    
     popen_args.append(repy)
-    popen_args.append(restriction)
+
+    # For tests requiring repy arguments besides restrictions.default
+    # the user must specify them after the pragma
+    arguments = repyArgs.split(" ")
+    for element in arguments:
+      popen_args.append(element)
   
   popen_args.append(file_path)
 
