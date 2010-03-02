@@ -249,6 +249,7 @@ def test_module(module_name, module_file_list):
     print "Now running setup script: " + setup_file
     test_single(setup_file)    
 
+  module_file_list.sort()
   for test_file in module_file_list: 
     test_single(test_file)
 
