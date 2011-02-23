@@ -6,7 +6,7 @@
 
 <Author>
   Vjekoslav Brajkovic
-
+  Stephen Sievers
 
 <Started>
   2009-07-11
@@ -36,11 +36,15 @@
     tokens.
     
     <Example>
-      #pragma repy [RESTRITIONS]
+      #pragma repy [RESTRICTIONS]
       #pragma out [TEXT]
       #pragma error [TEXT]
 
-    The parser throws on unrecognized pragmas. 
+    The parser throws an exception on unrecognized pragmas. 
+
+<Modified>
+  Modified on Nov. 16, 2010 by Monzur Muhammad to add functionality for the
+  verbose option. Now if verbose is on, it display the time taken for the test.
 """
 
 
@@ -53,7 +57,6 @@ import sys
 import time
 
 import utfutil
-
 
 # Valid prefix and suffix.
 SYNTAX_PREFIX = 'ut_'
@@ -68,7 +71,10 @@ ERROR_PRAGMA = 'error'
 OUT_PRAGMA = 'out'
 
 
+# Verbose Option
+VERBOSE = False
 
+SHOW_TIME = False
 
 # UTF Exceptions.
 class InvalidTestFileError(Exception): 
@@ -111,6 +117,11 @@ def main():
                     action="store_true", dest="verbose", default=False,
                     help="verbose output")
 
+  # Verbose flag.
+  group_generic.add_option("-T", "--show-time",
+                    action="store_true", dest="show_time", default=False,
+                    help="display the time taken to execute a test.")
+
   parser.add_option_group(group_generic)
 
   ### Testing Option Category.
@@ -126,6 +137,11 @@ def main():
                         help="execute a specific test file", 
                         metavar="FILE")
 
+  # Run all tests in current directory
+  group_test.add_option("-a", "--all", dest="all", action="store_true",
+                        help="execute all test files",
+                        metavar="ALL")
+
   parser.add_option_group(group_test)
   
   # All files in the current working directory.
@@ -139,15 +155,48 @@ def main():
   ###
   (options, args) = parser.parse_args()
 
+
+  #Count number of args for legal number of args test
+  i = 0
+  if (options.module):
+    i = i + 1
+  if (options.all):
+    i = i + 1
+  if (options.file):
+    i = i + 1
+
   # Test for mutual exclusion.
-  if (options.module and options.file):
+  if i > 1:
     parser.error("Options are mutually exclusive!")
     
+
+  # Check if the show_time option is on.
+  if (options.show_time):
+    global SHOW_TIME
+    SHOW_TIME = True
+
 
   if (options.file): # Single file.
 
     file_path = options.file
-    test_single(file_path)
+
+    # I need to derive the module name...
+    if not file_path.startswith('ut_') or len(file_path.split('_'))<3:
+      print "Error, cannot determine module name from filename '"+file_path+"'"
+      return
+    else:
+      module_name = file_path.split('_')[1]
+
+    # the test_module code is really poorly structured.   I need to tell it to 
+    # consider the shutdown, setup, and subprocess scripts...
+    files_to_use = [file_path]
+    module_file_list = filter_files(valid_files, module = module_name)
+    
+    files_to_use = files_to_use + filter_files(module_file_list, descriptor = 'setup')
+    files_to_use = files_to_use + filter_files(module_file_list, descriptor = 'shutdown')
+    files_to_use = files_to_use + filter_files(module_file_list, descriptor = 'subprocess')
+
+    test_module(module_name, files_to_use)
 
   elif (options.module): # Entire module.
     
@@ -157,17 +206,24 @@ def main():
     module_file_list = filter_files(valid_files, module = module_name)
     test_module(module_name, module_file_list)
     
-  else: # If no options are present, run all tests.
-    
+  elif (options.all): #all test files
     test_all(valid_files)
 
+  else: # If no options are present, print the usage
+    
+    print "Usage: python utf.py (-f filename | -m modulename | -a)"
+    print "-f -- test a specific filename"
+    print "-m -- test a module of modulename"
+    print "-a -- run all tests in current directory"
 
 
 
-def test_single(file_path):
+
+def execute_and_check_program(file_path):
   """
   <Purpose>
-    Given the test file path, this function will execute the test using the test framework.
+    Given the test file path, this function will execute the program and
+    monitor its behavior
     
   <Arguments>
     Test file path.
@@ -238,32 +294,43 @@ def test_module(module_name, module_file_list):
 
   
   sub = None
-  # If we must open a process to run concurrently with the tests 
+  # If we must open a process to run concurrently with the tests, we will use
+  # its stdin to indicate when to stop...
   if subprocess_file:
     print "Now starting subprocess: " + subprocess_file
-    sub = subprocess.Popen(['python', subprocess_file])
+    sub = subprocess.Popen(['python', subprocess_file], stdin=subprocess.PIPE)
     # Give the process time to start
     time.sleep(30)
 
   if setup_file:
     print "Now running setup script: " + setup_file
-    test_single(setup_file)    
+    execute_and_check_program(setup_file)    
 
-  module_file_list.sort()
+  start_time = time.time()
+
+  # Run the module tests
   for test_file in module_file_list: 
-    test_single(test_file)
+    execute_and_check_program(test_file)
+
+  end_time = time.time()
+
 
   if shutdown_file:
     print "Now running shutdown script: " + shutdown_file
-    test_single(shutdown_file)
+    execute_and_check_program(shutdown_file)
 
-  #If we opened a subprocess, we need to be sure to kill it
+  #If we opened a subprocess, we need to stop it by shutting its stdin
   if sub:
-    print "Now killing subprocess: " + subprocess_file    
-    if sys.version_info < (2, 6):
-      os.kill(sub.pid, signal.SIGTERM)
-    else: 
-      sub.kill()
+    print "Now stopping subprocess: " + subprocess_file    
+    sub.stdin.close()
+    sub.wait()
+
+
+  if SHOW_TIME:
+    print "Total time taken to run tests on module %s is: %s" % (module_name, str(end_time-start_time)[:6])
+
+
+
 
 def test_all(file_list):
   """
@@ -329,6 +396,8 @@ def testing_monitor(file_path):
 
   (module, descriptor) = parse_file_name(head)
   print "\tRunning: %-50s" % head,
+  # flush output in case the test hangs...
+  sys.stdout.flush()
 
   # Parse all pragma directives for that file.
   try: 
@@ -342,19 +411,38 @@ def testing_monitor(file_path):
     return
 
   # Now, execute the test file.
+  start_time = time.time()
   report = execution_monitor(file_path, pragmas)
 
+  # Calculate the time taken for the test
+  end_time = time.time()
+  time_taken = str(end_time - start_time)[:5]
+  if len(time_taken) < 5:
+    time_taken = " "*(5-len(time_taken)) + time_taken
+
   if report:
-    print '[ FAIL ]'
+    if SHOW_TIME:
+      print '[ FAIL ] [ %ss ]' % time_taken
+
+    else:
+      print '[ FAIL ]'
+
+
+
     print_dashes()
     
     for key, value in report.items():
-      print 'Standard', key, ': (Produced, Expected):'
-      print value
+      print 'Standard', key, ':'
+      produced_val, expected_val = value
+      print "."*30 + "Produced" + "."*30 + "\n" + str(produced_val)
+      print "."*30 + "Expected" + "."*30 + "\n" + str(expected_val)
       print_dashes()
     
   else:
-    print '[ PASS ]'
+    if SHOW_TIME:
+      print '[ PASS ] [ %ss ]' % time_taken
+    else:
+      print '[ PASS ]'
 
 
 
