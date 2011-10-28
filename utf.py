@@ -298,7 +298,7 @@ def test_module(module_name, module_file_list):
   # its stdin to indicate when to stop...
   if subprocess_file:
     print "Now starting subprocess: " + subprocess_file
-    sub = subprocess.Popen(['python', subprocess_file], stdin=subprocess.PIPE)
+    sub = subprocess.Popen([sys.executable, subprocess_file], stdin=subprocess.PIPE)
     # Give the process time to start
     time.sleep(30)
 
@@ -474,7 +474,7 @@ def execution_monitor(file_path, pragma_dictionary):
   # Status report.
   report = { }
 
-  executable = 'python'
+  executable = sys.executable
   popen_args = [ executable ]
 
   if pragma_dictionary.has_key(REPY_PRAGMA):
