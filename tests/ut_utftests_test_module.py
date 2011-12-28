@@ -1,6 +1,7 @@
 import subprocess
+import sys
 
-sub = subprocess.Popen(['python', 'utf.py', '-m', 'stagedtest'], 
+sub = subprocess.Popen([sys.executable, 'utf.py', '-m', 'stagedtest'], 
                                          stderr=subprocess.PIPE, 
                                          stdout=subprocess.PIPE)
 

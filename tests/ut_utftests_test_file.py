@@ -1,6 +1,7 @@
 import subprocess
+import sys
 
-sub = subprocess.Popen(['python', 'utf.py', '-f', 'ut_stagedtest_falsetestone.py'], 
+sub = subprocess.Popen([sys.executable, 'utf.py', '-f', 'ut_stagedtest_falsetestone.py'], 
                                          stderr=subprocess.PIPE, 
                                          stdout=subprocess.PIPE)
 (out, err) = sub.communicate()

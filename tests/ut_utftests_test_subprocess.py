@@ -1,8 +1,9 @@
 #pragma out Now starting subprocess
 
 import subprocess
+import sys
 
-process = subprocess.Popen(['python', 'utf.py', '-m', 'stagedtestsetup'], 
+process = subprocess.Popen([sys.executable, 'utf.py', '-m', 'stagedtestsetup'], 
                            stderr=subprocess.PIPE,
                            stdout=subprocess.PIPE)
 (out, err) = process.communicate()
