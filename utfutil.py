@@ -102,7 +102,7 @@ def kill(identifier):
   """
   <Purpose>
     Given the identifier, this function will search for the corresponding file
-    name, desirialize the file descriptor and kill the corresponding process.
+    name, deserialize the file descriptor and kill the corresponding process.
     
   <Arguments>
     Identifier.
