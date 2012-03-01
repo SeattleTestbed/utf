@@ -18,7 +18,7 @@
 
     Required naming convention for every test file:
 
-    ut_MODULE{_DESCRIPTOR].py
+    ut_MODULE[_DESCRIPTOR].py
 
     There can be multiple descriptors associated with a module.
 
@@ -44,7 +44,10 @@
 
 <Modified>
   Modified on Nov. 16, 2010 by Monzur Muhammad to add functionality for the
-  verbose option. Now if verbose is on, it display the time taken for the test.
+  verbose option. Now if verbose is on, it displays the time taken for the test.
+  
+  Modified on Feb. 29, 2012 by Moshe Kaplan to add support for running unit tests
+  with security layers.
 """
 
 
@@ -58,11 +61,9 @@ import time
 
 import utfutil
 
-# Valid prefix and suffix.
+# Required prefix and suffix.
 SYNTAX_PREFIX = 'ut_'
 SYNTAX_SUFFIX = '.py'
-
-
 
 
 # Acceptable pragma directives.
@@ -70,15 +71,12 @@ REPY_PRAGMA = 'repy'
 ERROR_PRAGMA = 'error'
 OUT_PRAGMA = 'out'
 
-
-# Verbose Option
-VERBOSE = False
-
 SHOW_TIME = False
 
 # UTF Exceptions.
 class InvalidTestFileError(Exception): 
   pass
+  
 class InvalidPragmaError(Exception): 
   pass
 
@@ -107,7 +105,15 @@ def main():
   ###
   ### Define allowed arguments.
   ###
-  parser = optparse.OptionParser()
+  
+  usage = \
+  """
+    Usage: python utf.py (-f filename | -m modulename | -a)
+    -f -- test a specific file
+    -m -- test a module of modulename
+    -a -- run all tests in current directory
+  """
+  parser = optparse.OptionParser(usage=usage)
 
   ### Generic Option Category.
   group_generic = optparse.OptionGroup(parser, "Generic")
@@ -117,17 +123,17 @@ def main():
                     action="store_true", dest="verbose", default=False,
                     help="verbose output")
 
-  # Verbose flag.
+  # Show Time flag.
   group_generic.add_option("-T", "--show-time",
                     action="store_true", dest="show_time", default=False,
                     help="display the time taken to execute a test.")
 
   parser.add_option_group(group_generic)
 
-  ### Testing Option Category.
+  ### Testing Option Category. One of these must be specified
   group_test = optparse.OptionGroup(parser, "Testing")
   
-  # Test for a specific module.
+  # Test a module.
   group_test.add_option("-m", "--module", dest="module",
                         help="run tests for a specific module", 
                         metavar="MODULE")
@@ -143,7 +149,18 @@ def main():
                         metavar="ALL")
 
   parser.add_option_group(group_test)
+ 
+   ### Security Layers Option Category.
+  group_security_layers = optparse.OptionGroup(parser, "Security Layers")
   
+  # Add a security layer if desired.
+  group_security_layers.add_option("-s", "--securitylayer", dest="security_layers",
+                        default=None, action = "append",
+                        help="execute the specified tests with a security layer")
+
+  parser.add_option_group(group_security_layers)
+  
+   
   # All files in the current working directory.
   all_files = glob.glob("*")
 
@@ -156,38 +173,39 @@ def main():
   (options, args) = parser.parse_args()
 
 
-  #Count number of args for legal number of args test
-  i = 0
+  # Count the number of args to test for mutual exclusion.
+  count = 0
   if (options.module):
-    i = i + 1
+    count = count + 1
   if (options.all):
-    i = i + 1
+    count = count + 1
   if (options.file):
-    i = i + 1
+    count = count + 1
 
-  # Test for mutual exclusion.
-  if i > 1:
+  if count == 0:
+    parser.error("At least one option must be selected!")
+  elif count > 1:
     parser.error("Options are mutually exclusive!")
     
-
   # Check if the show_time option is on.
   if (options.show_time):
     global SHOW_TIME
     SHOW_TIME = True
 
-
-  if (options.file): # Single file.
+  # Single file.
+  if (options.file): 
 
     file_path = options.file
-
-    # I need to derive the module name...
-    if not file_path.startswith('ut_') or len(file_path.split('_'))<3:
-      print "Error, cannot determine module name from filename '"+file_path+"'"
+    
+    # Derive the module name...
+    try:
+      module_name = parse_file_name(file_path)[0]
+    except InvalidTestFileError, e:
+      print e
       return
-    else:
-      module_name = file_path.split('_')[1]
 
-    # the test_module code is really poorly structured.   I need to tell it to 
+    
+    # The test_module code is really poorly structured. I need to tell it to 
     # consider the shutdown, setup, and subprocess scripts...
     files_to_use = [file_path]
     module_file_list = filter_files(valid_files, module = module_name)
@@ -196,40 +214,37 @@ def main():
     files_to_use = files_to_use + filter_files(module_file_list, descriptor = 'shutdown')
     files_to_use = files_to_use + filter_files(module_file_list, descriptor = 'subprocess')
 
-    test_module(module_name, files_to_use)
+    test_module(module_name, files_to_use, options.security_layers)
 
-  elif (options.module): # Entire module.
+  # Entire module.
+  elif (options.module): 
     
     # Retrieve the module name.
     module_name = options.module
     
     module_file_list = filter_files(valid_files, module = module_name)
-    test_module(module_name, module_file_list)
+    test_module(module_name, module_file_list, options.security_layers)
     
-  elif (options.all): #all test files
-    test_all(valid_files)
-
-  else: # If no options are present, print the usage
-    
-    print "Usage: python utf.py (-f filename | -m modulename | -a)"
-    print "-f -- test a specific filename"
-    print "-m -- test a module of modulename"
-    print "-a -- run all tests in current directory"
+  # Test all files
+  else: 
+    test_all(valid_files, options.security_layers)
 
 
 
 
-def execute_and_check_program(file_path):
+def execute_and_check_program(file_path, security_layers):
   """
   <Purpose>
     Given the test file path, this function will execute the program and
-    monitor its behavior
+    monitor its behavior.
     
   <Arguments>
-    Test file path.
+    file_path: Test file path.
+    security_layers: A list of security layers to use. If no security are 
+      selected, this should have a value of None .
 
   <Exceptions>
-    None.
+    None
     
   <Side Effects>
     None
@@ -238,21 +253,23 @@ def execute_and_check_program(file_path):
     None
   """
   file_path = os.path.normpath(file_path)
-  testing_monitor(file_path)
+  testing_monitor(file_path, security_layers)
 
 
 
 
-def test_module(module_name, module_file_list):
+def test_module(module_name, module_file_list, security_layers):
   """
   <Purpose>
     Execute all test files contained within module_file_list matching the
-    module_name in the form of each test file name 'ut_<module_name>_<descriptor>.py'
+    module_name in the form of each test file name 'ut_<module_name>_<descriptor>.py'.
 
   <Arguments>
     module_name: module name to be tested
     module_file_list: a list of files to be filtered by module name and ran through
-      the testing framework
+      the testing framework.
+    security_layers: A list of security layers to use. If no security are 
+      selected, this should have a value of None.
 
   <Exceptions>
     None
@@ -310,7 +327,7 @@ def test_module(module_name, module_file_list):
 
   # Run the module tests
   for test_file in module_file_list: 
-    execute_and_check_program(test_file)
+    execute_and_check_program(test_file, security_layers)
 
   end_time = time.time()
 
@@ -332,7 +349,7 @@ def test_module(module_name, module_file_list):
 
 
 
-def test_all(file_list):
+def test_all(file_list, security_layers):
   """
   <Purpose>
     Given the list of valid test files, this function will test each module
@@ -340,7 +357,9 @@ def test_all(file_list):
     
   <Arguments> 
     file_list: List of test files to be ran
-
+    security_layers: A list of security layers to use. If no security are 
+      selected, this should have a value of None 
+      
   <Exceptions>
     None
     
@@ -364,12 +383,12 @@ def test_all(file_list):
   
   # Test each module.
   for module_name, module_file_list in module_dictionary.iteritems():
-    test_module(module_name, module_file_list)
+    test_module(module_name, module_file_list, security_layers)
 
 
 
 
-def testing_monitor(file_path):
+def testing_monitor(file_path, security_layers):
   """
   <Purpose>
     Executes and prints the results of the unit test contained within 'file_path'
@@ -377,7 +396,9 @@ def testing_monitor(file_path):
  
   <Arguments>
     file_path: File to be used within the testing_monitor
-
+    security_layers: A list of security layers to use. If no security are 
+      selected, this should have a value of None 
+      
   <Exceptions>
     InvalidPragmaError: if there is an invalid pragma within the source file
 
@@ -412,7 +433,7 @@ def testing_monitor(file_path):
 
   # Now, execute the test file.
   start_time = time.time()
-  report = execution_monitor(file_path, pragmas)
+  report = execution_monitor(file_path, pragmas, security_layers)
 
   # Calculate the time taken for the test
   end_time = time.time()
@@ -423,11 +444,8 @@ def testing_monitor(file_path):
   if report:
     if SHOW_TIME:
       print '[ FAIL ] [ %ss ]' % time_taken
-
     else:
       print '[ FAIL ]'
-
-
 
     print_dashes()
     
@@ -447,7 +465,7 @@ def testing_monitor(file_path):
 
 
 
-def execution_monitor(file_path, pragma_dictionary):
+def execution_monitor(file_path, pragma_dictionary, security_layers):
   """
   <Purpose>
     Executes a unit test written with a source contained in file_path. If the source
@@ -457,9 +475,13 @@ def execution_monitor(file_path, pragma_dictionary):
     framework will include that there was to be output in the report.
  
   <Arguments>
-    file_path: file to be executed under the framework
-    pragma_dictionary: dictionary of pragmas within this test file
-
+    file_path: file to be executed under the framework.
+    
+    pragma_dictionary: dictionary of pragmas within this test file.
+    
+    security_layers: A list of security layers to use. If no security are 
+      selected, this should have a value of None.
+      
   <Exceptions>
     None
 
@@ -474,26 +496,32 @@ def execution_monitor(file_path, pragma_dictionary):
   # Status report.
   report = { }
 
-  executable = sys.executable
-  popen_args = [ executable ]
-
+  popen_args = []
+  popen_args.append(sys.executable)
+  
   if pragma_dictionary.has_key(REPY_PRAGMA):
-    repy = 'repy.py'
-    default_restriction = 'restrictions.default'
+    restrictions = 'restrictions.default'
+    otherargs = []
+    
+    repyArgs = pragma_dictionary[REPY_PRAGMA]
     
     # Did the user specify a non-default restrictions file?
-    repyArgs = pragma_dictionary[REPY_PRAGMA]
-    if not repyArgs: 
-      repyArgs = default_restriction
+    if repyArgs: 
+      arguments = repyArgs.split(" ")
+      
+      # The first argument is the restrictions file
+      restrictions = arguments[0]
+      # The remaining arguments are the program's arguments
+      otherargs = arguments[1:]
    
-    popen_args.append(repy)
+    popen_args.append('repy.py')
+    popen_args.append(restrictions)
+    if security_layers:
+      popen_args.append('encasementlib.repy')
+      popen_args.extend(security_layers)
+    
+    popen_args.extend(otherargs)
 
-    # For tests requiring repy arguments besides restrictions.default
-    # the user must specify them after the pragma
-    arguments = repyArgs.split(" ")
-    for element in arguments:
-      popen_args.append(element)
-  
   popen_args.append(file_path)
 
   # Execute the program.
@@ -503,12 +531,16 @@ def execution_monitor(file_path, pragma_dictionary):
   if pragma_dictionary.has_key(OUT_PRAGMA):
     expected_out = pragma_dictionary[OUT_PRAGMA]
     
-    if not expected_out and not out: # pragma out
+    # pragma out
+    if not expected_out and not out: 
       report[OUT_PRAGMA] = (None, expected_out)
-    elif not expected_out in out: # pragma out [ARGUMENT]
+      
+    # pragma out [ARGUMENT]
+    elif not expected_out in out: 
       report[OUT_PRAGMA] = (out, expected_out)
-    
-  elif out: # If not, make sure the standard out is empty.
+      
+  # If not, make sure the standard out is empty.
+  elif out: 
     report[ERROR_PRAGMA] = (out, None)
 
 
@@ -516,15 +548,18 @@ def execution_monitor(file_path, pragma_dictionary):
   if pragma_dictionary.has_key(ERROR_PRAGMA):
     expected_error = pragma_dictionary[ERROR_PRAGMA]
     
-    if not expected_error and not  error: # pragma error
+    # pragma error
+    if not expected_error and not  error: 
       report[ERROR_PRAGMA] = (None, expected_error)
-    elif not expected_error in error: # pragma error [ARGUMENT]
-      report[ERROR_PRAGMA] = (error, expected_error)
       
-  elif error: # If not, make sure the standard error is empty.
+    # pragma error [ARGUMENT]
+    elif not expected_error in error: 
+      report[ERROR_PRAGMA] = (error, expected_error)
+  
+  # If not, make sure the standard error is empty. 
+  elif error: 
     report[ERROR_PRAGMA] = (error, None)
-
-
+  
   return report
 
  
@@ -577,7 +612,7 @@ def parse_file_name(file_name):
 
   <Exceptions>
     InvalidTestFileError: if you provide a test file which does not follow the
-      naming convention of 'ut_<module>_<descriptor>.py'
+      naming convention of 'ut_<module>_<descriptor>.py'.
       
   <Side Effects>
     None
@@ -588,18 +623,22 @@ def parse_file_name(file_name):
     
   """
   if not file_name.startswith(SYNTAX_PREFIX):
-    raise InvalidTestFileError(file_name)
+    raise InvalidTestFileError("Error: Unit test file name must start with '"+\
+      SYNTAX_PREFIX +"'. Filename '"+file_name+"' is invalid.")
   if not file_name.endswith(SYNTAX_SUFFIX):
-    raise InvalidTestFileError(file_name)
+    raise InvalidTestFileError("Error: Unit test file name must end with '"+\
+      SYNTAX_SUFFIX+"'. Filename '"+file_name+"' is invalid.")
   
   # Remove prefix and suffix.
   stripped = file_name[len(SYNTAX_PREFIX):-len(SYNTAX_SUFFIX)]
+
   # Partition the string.
   (module, separator, descriptor) = stripped.partition('_')
 
   # Empty module name is not allowed.
   if not module:
-    raise InvalidTestFileError(file_name)
+    raise InvalidTestFileError("Error: Cannot determine module name from filename '"+\
+      file_name+"'. Files must have a form of 'ut_MODULE[_DESCRIPTOR].py'")
 
   return (module, descriptor)
 
@@ -632,14 +671,16 @@ def filter_files(file_list, module = None, descriptor = None):
   
   for file_name in file_list:
     
+    # Skip invalid files
     try:
       (file_module, file_descrriptor) = parse_file_name(file_name)
-    except InvalidTestFileError: # This is not a valid test file.
+    except InvalidTestFileError:
       continue
     
     # Filter based on the module name.
     if module and file_module != module:
       continue
+      
     # Filter based on the descriptor.
     if descriptor and file_descrriptor != descriptor:
       continue
@@ -660,12 +701,7 @@ def print_dashes():
 if __name__ == "__main__":
   try:
     main()
-  except IOError:
-    raise
+  except IOError, e:
+    print "Error: No such file or directory: '"+e.filename+"'"
   except InvalidTestFileError, e:
     print 'Invalid file name syntax:', e
-  except:
-    print 'Internal error. Trace:'
-    print_dashes()
-    raise
-
