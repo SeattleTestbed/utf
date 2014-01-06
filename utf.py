@@ -63,7 +63,7 @@ import utfutil
 
 # Required prefix and suffix.
 SYNTAX_PREFIX = 'ut_'
-SYNTAX_SUFFIX = '.py'
+SYNTAX_SUFFIX = ['.py', '.repy']
 
 
 # Acceptable pragma directives.
@@ -520,6 +520,8 @@ def execution_monitor(file_path, pragma_dictionary, security_layers):
       popen_args.append('encasementlib.repy')
       popen_args.extend(security_layers)
     
+    # Add in dylink for import purposes.
+    popen_args.append('dylink.repy')
     popen_args.extend(otherargs)
 
   popen_args.append(file_path)
@@ -625,12 +627,16 @@ def parse_file_name(file_name):
   if not file_name.startswith(SYNTAX_PREFIX):
     raise InvalidTestFileError("Error: Unit test file name must start with '"+\
       SYNTAX_PREFIX +"'. Filename '"+file_name+"' is invalid.")
-  if not file_name.endswith(SYNTAX_SUFFIX):
+
+  # Retrieve the file extension.
+  file_extension = '.' + file_name.split('.')[-1]
+
+  if file_extension not in SYNTAX_SUFFIX:
     raise InvalidTestFileError("Error: Unit test file name must end with '"+\
-      SYNTAX_SUFFIX+"'. Filename '"+file_name+"' is invalid.")
+      file_extension+"'. Filename '"+file_name+"' is invalid.")
   
   # Remove prefix and suffix.
-  stripped = file_name[len(SYNTAX_PREFIX):-len(SYNTAX_SUFFIX)]
+  stripped = file_name[len(SYNTAX_PREFIX):-len(file_extension)]
 
   # Partition the string.
   (module, separator, descriptor) = stripped.partition('_')
