@@ -521,8 +521,12 @@ def execution_monitor(file_path, pragma_dictionary, security_layers):
       popen_args.extend(security_layers)
     
     # Add in dylink for import purposes.
-    popen_args.append('dylink.repy')
-    popen_args.extend(otherargs)
+    # MMM: We cannot unfortunately add in dylink blindly,
+    # otherwise it breaks some tests. We need to re-evaluate
+    # and figure out another way of adding dylink to only specific
+    # tests.
+    # popen_args.append('dylink.repy')
+    # popen_args.extend(otherargs)
 
   popen_args.append(file_path)
 
