@@ -1,4 +1,4 @@
-#pragma out Now killing subprocess
+#pragma out Now stopping subprocess
 
 import subprocess
 import sys

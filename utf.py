@@ -321,7 +321,7 @@ def test_module(module_name, module_file_list, security_layers):
 
   if setup_file:
     print "Now running setup script: " + setup_file
-    execute_and_check_program(setup_file)    
+    execute_and_check_program(setup_file, security_layers)
 
   start_time = time.time()
 
@@ -334,7 +334,7 @@ def test_module(module_name, module_file_list, security_layers):
 
   if shutdown_file:
     print "Now running shutdown script: " + shutdown_file
-    execute_and_check_program(shutdown_file)
+    execute_and_check_program(shutdown_file, security_layers)
 
   #If we opened a subprocess, we need to stop it by shutting its stdin
   if sub:
