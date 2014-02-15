@@ -164,6 +164,9 @@ def main():
   # All files in the current working directory.
   all_files = glob.glob("*")
 
+  # Sort so that it is easier to keep track if a test passed/failed.
+  all_files.sort()
+
   # Valid test files in the current working directory.
   valid_files = filter_files(all_files)
 
