@@ -529,7 +529,9 @@ def execution_monitor(file_path, pragma_dictionary, security_layers):
     # and figure out another way of adding dylink to only specific
     # tests.
     # popen_args.append('dylink.repy')
-    # popen_args.extend(otherargs)
+
+    # Do allow other args to Repy (#1373)
+    popen_args.extend(otherargs)
 
   popen_args.append(file_path)
 
