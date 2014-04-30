@@ -63,7 +63,7 @@ import utfutil
 
 # Required prefix and suffix.
 SYNTAX_PREFIX = 'ut_'
-SYNTAX_SUFFIX = ['.py', '.repy']
+SYNTAX_SUFFIX = ['.py', '.repy', '.r2py']
 
 
 # Acceptable pragma directives.
