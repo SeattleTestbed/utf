@@ -699,8 +699,8 @@ def parse_file_name(file_name):
   file_extension = '.' + file_name.split('.')[-1]
 
   if file_extension not in SYNTAX_SUFFIX:
-    raise InvalidTestFileError("Error: Unit test file name must end with '"+\
-      file_extension+"'. Filename '"+file_name+"' is invalid.")
+    raise InvalidTestFileError("Error: Unit test file name must end with " +
+      str(SYNTAX_SUFFIX) + ". Filename '" + file_name + "' is invalid.")
   
   # Remove prefix and suffix.
   stripped = file_name[len(SYNTAX_PREFIX):-len(file_extension)]
