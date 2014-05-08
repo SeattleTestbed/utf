@@ -520,7 +520,7 @@ def execution_monitor(file_path, pragma_dictionary, security_layers):
     popen_args.append('repy.py')
     popen_args.append(restrictions)
     if security_layers:
-      popen_args.append('encasementlib.repy')
+      popen_args.append('encasementlib.r2py')
       popen_args.extend(security_layers)
     
     # Add in dylink for import purposes.
@@ -528,7 +528,7 @@ def execution_monitor(file_path, pragma_dictionary, security_layers):
     # otherwise it breaks some tests. We need to re-evaluate
     # and figure out another way of adding dylink to only specific
     # tests.
-    # popen_args.append('dylink.repy')
+    # popen_args.append('dylink.r2py')
 
     # Do allow other args to Repy (#1373)
     popen_args.extend(otherargs)
