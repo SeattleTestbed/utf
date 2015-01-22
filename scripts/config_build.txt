@@ -1,0 +1,5 @@
+./*
+DEPENDENCIES/repy_v2/*
+DEPENDENCIES/common/*
+# Tests
+test ./tests/*
