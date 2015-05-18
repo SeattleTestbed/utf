@@ -1,5 +1,6 @@
 ./*
 DEPENDENCIES/repy_v2/*
 DEPENDENCIES/common/*
+DEPENDENCIES/seattlelib_v2/*
 # Tests
 test ./tests/*
