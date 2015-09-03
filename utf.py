@@ -73,6 +73,11 @@ OUT_PRAGMA = 'out'
 
 SHOW_TIME = False
 
+
+# List of tests that failed
+failed_tests = []
+
+
 # UTF Exceptions.
 class InvalidTestFileError(Exception): 
   pass
@@ -232,6 +237,14 @@ def main():
   else: 
     test_all(valid_files, options.security_layers)
 
+  # Finally, set our exit status to be the number of failed tests.
+  # This is required for continuous integration frameworks (see 
+  # SeattleTestbed/utf#61), and useful for shell scripting in general. 
+  # I'll cap the exit status at 125 to prevent potential 8-bit int 
+  # overflows on repos with lots of tests, and also stay clear of 
+  # POSIXly and conventionally used reserved/"magic" values.
+  exit_status = min(len(failed_tests), 125)
+  sys.exit(exit_status)
 
 
 
@@ -451,6 +464,9 @@ def testing_monitor(file_path, security_layers):
     time_taken = " "*(5-len(time_taken)) + time_taken
 
   if report:
+    # Add the test's file name to the failed list
+    failed_tests.append(file_path)
+
     if SHOW_TIME:
       print '[ FAIL ] [ %ss ]' % time_taken
     else:
