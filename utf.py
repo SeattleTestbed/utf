@@ -51,7 +51,7 @@
 
 
 import glob
-import optparse
+import argparse
 import os
 import subprocess
 import sys
@@ -105,134 +105,78 @@ def main():
   <Returns>
     None
   """
-  ###
-  ### Define allowed arguments.
-  ###
   
-  usage = \
-  """
-    Usage: python utf.py (-f filename | -m modulename | -a)
-    -f -- test a specific file
-    -m -- test a module of modulename
-    -a -- run all tests in current directory
-  """
-  parser = optparse.OptionParser(usage=usage)
+  parser = argparse.ArgumentParser(description="Run the Seattle Testbed unit tests.")
 
-  ### Generic Option Category.
-  group_generic = optparse.OptionGroup(parser, "Generic")
-  
-  # Verbose flag.
-  group_generic.add_option("-v", "--verbose",
-                    action="store_true", dest="verbose", default=False,
-                    help="verbose output")
+  # -f, -m, -a are mutually exclusive options
+  group = parser.add_mutually_exclusive_group(required=True)
+  group.add_argument("-a", "--all", action="store_true", dest="run_all",
+      help="Run all tests in this directory")
+  group.add_argument("-m", "--module", type=str, action="store",
+      dest="module_name", help="Run all tests for the given module")
+  group.add_argument("-f", "--file", "--files", type=str, action="store",
+      dest="file_name", nargs="+", help="Run given test file(s) in alphabetical order, including their module's setup/subprocess/shutdown scripts")
 
-  # Show Time flag.
-  group_generic.add_option("-T", "--show-time",
-                    action="store_true", dest="show_time", default=False,
-                    help="display the time taken to execute a test.")
+  # -s, -t can coexist just fine
+  parser.add_argument("-t", "--time", action="store_true", dest="show_time",
+      help="Display the time taken to execute a test")
+  parser.add_argument("-s", "--security-layer", "--security-layers", 
+      action="store", dest="security_layers", nargs="+",
+      help="Execute tests with a security layer (or layers)")
 
-  parser.add_option_group(group_generic)
+  options = parser.parse_args()
 
-  ### Testing Option Category. One of these must be specified
-  group_test = optparse.OptionGroup(parser, "Testing")
-  
-  # Test a module.
-  group_test.add_option("-m", "--module", dest="module",
-                        help="run tests for a specific module", 
-                        metavar="MODULE")
-
-  # Run a specific test file.
-  group_test.add_option("-f", "--file", dest="file",
-                        help="execute a specific test file", 
-                        metavar="FILE")
-
-  # Run all tests in current directory
-  group_test.add_option("-a", "--all", dest="all", action="store_true",
-                        help="execute all test files",
-                        metavar="ALL")
-
-  parser.add_option_group(group_test)
- 
-   ### Security Layers Option Category.
-  group_security_layers = optparse.OptionGroup(parser, "Security Layers")
-  
-  # Add a security layer if desired.
-  group_security_layers.add_option("-s", "--securitylayer", dest="security_layers",
-                        default=None, action = "append",
-                        help="execute the specified tests with a security layer")
-
-  parser.add_option_group(group_security_layers)
-  
    
-  # All files in the current working directory.
+  # Generate sorted list of valid unit test file names from all files 
+  # in the current working directory.
   all_files = glob.glob("*")
-
-  # Sort so that it is easier to keep track if a test passed/failed.
-  all_files.sort()
-
-  # Valid test files in the current working directory.
   valid_files = filter_files(all_files)
-
-  ###
-  # Parse the arguments.
-  ###
-  (options, args) = parser.parse_args()
+  valid_files.sort()
 
 
-  # Count the number of args to test for mutual exclusion.
-  count = 0
-  if (options.module):
-    count = count + 1
-  if (options.all):
-    count = count + 1
-  if (options.file):
-    count = count + 1
-
-  if count == 0:
-    parser.error("At least one option must be selected!")
-  elif count > 1:
-    parser.error("Options are mutually exclusive!")
-    
   # Check if the show_time option is on.
-  if (options.show_time):
+  if options.show_time:
     global SHOW_TIME
     SHOW_TIME = True
 
-  # Single file.
-  if (options.file): 
+  # Run tests for a list of file names (could contain just a single file)
+  if options.file_name: 
+    # Verify that all files are from the same module. (Otherwise we can't 
+    # pick which setup/subprocess/shutdown scripts to run.)
+    requested_modules = set()
+    for file_name in options.file_name:
+      module_name, descriptor = parse_file_name(file_name)
+      requested_modules.add(module_name)
 
-    file_path = options.file
-    
-    # Derive the module name...
-    try:
-      module_name = parse_file_name(file_path)[0]
-    except InvalidTestFileError, e:
-      print e
-      return
+    if len(requested_modules) != 1:
+      print "Error: Please restrict your choice of test cases to a single "
+      print "module when using the -f / --file / --files option."
+      print "Modules you requested were", ", ".join(requested_modules)
+      print
+      return 1
 
-    
+    # Ensure alphabetical order of test cases that were supplied
+    options.file_name.sort()
+
     # The test_module code is really poorly structured. I need to tell it to 
     # consider the shutdown, setup, and subprocess scripts...
-    files_to_use = [file_path]
     module_file_list = filter_files(valid_files, module = module_name)
     
-    files_to_use = files_to_use + filter_files(module_file_list, descriptor = 'setup')
-    files_to_use = files_to_use + filter_files(module_file_list, descriptor = 'shutdown')
-    files_to_use = files_to_use + filter_files(module_file_list, descriptor = 'subprocess')
+    files_to_use = (options.file_name + 
+        filter_files(module_file_list, descriptor='setup') + 
+        filter_files(module_file_list, descriptor='subprocess') + 
+        filter_files(module_file_list, descriptor='shutdown'))
 
     test_module(module_name, files_to_use, options.security_layers)
 
-  # Entire module.
-  elif (options.module): 
-    
-    # Retrieve the module name.
-    module_name = options.module
-    
-    module_file_list = filter_files(valid_files, module = module_name)
-    test_module(module_name, module_file_list, options.security_layers)
+
+  # Test an entire module
+  if options.module_name:
+    module_file_list = filter_files(valid_files, module = options.module_name)
+    test_module(options.module_name, module_file_list, options.security_layers)
     
   # Test all files
-  else: 
+  if options.run_all:
     test_all(valid_files, options.security_layers)
 
   # Finally, set our exit status to be the number of failed tests.
@@ -330,6 +274,10 @@ def test_module(module_name, module_file_list, security_layers):
     module_file_list.remove(shutdown_file)
 
   
+  if setup_file:
+    print "Now running setup script: " + setup_file
+    execute_and_check_program(setup_file, security_layers)
+
   sub = None
   # If we must open a process to run concurrently with the tests, we will use
   # its stdin to indicate when to stop...
@@ -338,10 +286,6 @@ def test_module(module_name, module_file_list, security_layers):
     sub = subprocess.Popen([sys.executable, subprocess_file], stdin=subprocess.PIPE)
     # Give the process time to start
     time.sleep(30)
-
-  if setup_file:
-    print "Now running setup script: " + setup_file
-    execute_and_check_program(setup_file, security_layers)
 
   start_time = time.time()
 
@@ -543,13 +487,6 @@ def execution_monitor(file_path, pragma_dictionary, security_layers):
       popen_args.append('encasementlib.r2py')
       popen_args.extend(security_layers)
     
-    # Add in dylink for import purposes.
-    # MMM: We cannot unfortunately add in dylink blindly,
-    # otherwise it breaks some tests. We need to re-evaluate
-    # and figure out another way of adding dylink to only specific
-    # tests.
-    # popen_args.append('dylink.r2py')
-
     # Do allow other args to Repy (#1373)
     popen_args.extend(otherargs)
 
@@ -766,7 +703,7 @@ def filter_files(file_list, module = None, descriptor = None):
     
     # Skip invalid files
     try:
-      (file_module, file_descrriptor) = parse_file_name(file_name)
+      (file_module, file_descriptor) = parse_file_name(file_name)
     except InvalidTestFileError:
       continue
     
@@ -775,7 +712,7 @@ def filter_files(file_list, module = None, descriptor = None):
       continue
       
     # Filter based on the descriptor.
-    if descriptor and file_descrriptor != descriptor:
+    if descriptor and file_descriptor != descriptor:
       continue
     
     result.append(file_name) 
