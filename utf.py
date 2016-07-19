@@ -1,4 +1,3 @@
-#!/usr/bin/python
 """
 <Program>
   Seattle Test Framework
@@ -54,7 +53,6 @@
 import glob
 import optparse
 import os
-import signal
 import subprocess
 import sys
 import time
