@@ -345,8 +345,14 @@ def test_all(file_list, security_layers):
     else:
       module_dictionary[module] = [test_file]
   
+  # Put the modules in alphabetical order
+  # (like SeattleTestbed/ATTIC#1225)
+  module_names =  module_dictionary.keys()
+  module_names.sort()
+
   # Test each module.
-  for module_name, module_file_list in module_dictionary.iteritems():
+  for module_name in module_names:
+    module_file_list = module_dictionary[module_name]
     test_module(module_name, module_file_list, security_layers)
 
 
